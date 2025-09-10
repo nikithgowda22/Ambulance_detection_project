@@ -1,11 +1,21 @@
 // frontend/screens/PoliceDashboard.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Button } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  Alert, 
+  TouchableOpacity,
+  StatusBar,
+  RefreshControl
+} from 'react-native';
 import WebSocketService from '../services/websocketService';
 
-const policedashboard = () => {
+const PoliceDashboard = () => {
   const [alerts, setAlerts] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // Connect to WebSocket when component mounts
@@ -19,9 +29,12 @@ const policedashboard = () => {
         
         // Show immediate notification
         Alert.alert(
-          'Ambulance Alert',
+          '🚨 Emergency Alert',
           data.message,
-          [{ text: 'OK' }]
+          [
+            { text: 'Dismiss', style: 'cancel' },
+            { text: 'View Details', style: 'default' }
+          ]
         );
       }
     };
@@ -45,103 +58,337 @@ const policedashboard = () => {
     WebSocketService.connect('police');
   };
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    // Simulate refresh delay
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  };
+
+  const formatAlertPriority = (message) => {
+    if (message.toLowerCase().includes('emergency') || message.toLowerCase().includes('critical')) {
+      return 'HIGH';
+    } else if (message.toLowerCase().includes('urgent')) {
+      return 'MEDIUM';
+    }
+    return 'LOW';
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'HIGH': return '#FF3B30';
+      case 'MEDIUM': return '#FF9500';
+      case 'LOW': return '#34C759';
+      default: return '#007AFF';
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Police Dashboard</Text>
+    <View style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#1e3a8a" />
       
-      <View style={styles.connectionStatus}>
-        <Text style={isConnected ? styles.connected : styles.disconnected}>
-          {isConnected ? 'Connected' : 'Disconnected'}
-        </Text>
-        {!isConnected && (
-          <Button title="Reconnect" onPress={handleReconnect} />
-        )}
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>🚔 Police Dashboard</Text>
+          <Text style={styles.subtitle}>Emergency Response Center</Text>
+        </View>
       </View>
-      
-      <Text style={styles.subtitle}>Recent Alerts:</Text>
-      
-      <ScrollView style={styles.alertsContainer}>
-        {alerts.length === 0 ? (
-          <Text style={styles.noAlerts}>No alerts received yet</Text>
-        ) : (
-          alerts.map((alert, index) => (
-            <View key={index} style={styles.alertCard}>
-              <Text style={styles.alertMessage}>{alert.message}</Text>
-              <Text style={styles.alertTime}>
-                {new Date(alert.timestamp).toLocaleTimeString()}
-              </Text>
+
+      {/* Connection Status */}
+      <View style={styles.statusContainer}>
+        <View style={styles.connectionStatus}>
+          <View style={styles.statusIndicator}>
+            <View style={[
+              styles.statusDot, 
+              { backgroundColor: isConnected ? '#34C759' : '#FF3B30' }
+            ]} />
+            <Text style={[
+              styles.statusText,
+              { color: isConnected ? '#34C759' : '#FF3B30' }
+            ]}>
+              {isConnected ? 'System Online' : 'Connection Lost'}
+            </Text>
+          </View>
+          
+          {!isConnected && (
+            <TouchableOpacity style={styles.reconnectButton} onPress={handleReconnect}>
+              <Text style={styles.reconnectText}>Reconnect</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Stats */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{alerts.length}</Text>
+            <Text style={styles.statLabel}>Active Alerts</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>
+              {alerts.filter(alert => formatAlertPriority(alert.message) === 'HIGH').length}
+            </Text>
+            <Text style={styles.statLabel}>High Priority</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>24/7</Text>
+            <Text style={styles.statLabel}>Monitoring</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Alerts Section */}
+      <View style={styles.alertsSection}>
+        <Text style={styles.sectionTitle}>Recent Emergency Alerts</Text>
+        
+        <ScrollView 
+          style={styles.alertsContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {alerts.length === 0 ? (
+            <View style={styles.noAlertsContainer}>
+              <Text style={styles.noAlertsIcon}>📡</Text>
+              <Text style={styles.noAlertsText}>No alerts received</Text>
+              <Text style={styles.noAlertsSubtext}>System is monitoring for emergency calls</Text>
             </View>
-          ))
-        )}
-      </ScrollView>
+          ) : (
+            alerts.map((alert, index) => {
+              const priority = formatAlertPriority(alert.message);
+              return (
+                <TouchableOpacity key={index} style={styles.alertCard}>
+                  <View style={styles.alertHeader}>
+                    <View style={[
+                      styles.priorityBadge,
+                      { backgroundColor: getPriorityColor(priority) }
+                    ]}>
+                      <Text style={styles.priorityText}>{priority}</Text>
+                    </View>
+                    <Text style={styles.alertTime}>
+                      {new Date(alert.timestamp).toLocaleString()}
+                    </Text>
+                  </View>
+                  
+                  <Text style={styles.alertMessage}>{alert.message}</Text>
+                  
+                  <View style={styles.alertActions}>
+                    <TouchableOpacity style={styles.actionButton}>
+                      <Text style={styles.actionButtonText}>Respond</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, styles.secondaryButton]}>
+                      <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>Details</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8fafc',
+  },
+  header: {
+    backgroundColor: '#1e3a8a',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  headerContent: {
+    alignItems: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
+    color: 'white',
+    marginBottom: 4,
+    marginTop:25
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#bfdbfe',
+    opacity: 0.9,
+  },
+  statusContainer: {
+    backgroundColor: 'white',
+    margin: 16,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   connectionStatus: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    padding: 10,
-    backgroundColor: 'white',
+    marginBottom: 20,
+  },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  reconnectButton: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 8,
   },
-  connected: {
-    color: 'green',
-    fontWeight: 'bold',
-  },
-  disconnected: {
-    color: 'red',
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    fontSize: 18,
+  reconnectText: {
+    color: 'white',
     fontWeight: '600',
-    marginBottom: 12,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 4,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1e3a8a',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  alertsSection: {
+    flex: 1,
+    marginHorizontal: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 16,
   },
   alertsContainer: {
     flex: 1,
   },
-  noAlerts: {
+  noAlertsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  noAlertsIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  noAlertsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  noAlertsSubtext: {
+    fontSize: 14,
+    color: '#94a3b8',
     textAlign: 'center',
-    color: '#666',
-    marginTop: 20,
-    fontStyle: 'italic',
   },
   alertCard: {
     backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 8,
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF3B30',
   },
-  alertMessage: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#d32f2f',
-    fontWeight: '500',
+  alertHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  priorityText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   alertTime: {
     fontSize: 12,
-    color: '#666',
+    color: '#374151',
+    fontWeight: '600',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  alertMessage: {
+    fontSize: 16,
+    color: '#1e293b',
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  alertActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#1e3a8a',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  actionButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  secondaryButtonText: {
+    color: '#64748b',
   },
 });
 
-export default policedashboard;
+export default PoliceDashboard;
