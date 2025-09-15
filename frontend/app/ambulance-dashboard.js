@@ -1,11 +1,10 @@
-// app/ambulance-dashboard.js
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
   Alert,
   RefreshControl,
   Modal,
@@ -38,55 +37,35 @@ const AmbulanceDashboard = () => {
 
   useEffect(() => {
     WebSocketService.connect('ambulance');
-    
+
     // Get current location on component mount
     getCurrentLocation();
-    
+
     const handleMessage = (data) => {
-      console.log('Ambulance received:', data);
-      
-      if (data.type === 'emergency_call') {
-        setEmergencyCalls(prevCalls => [data, ...prevCalls]);
-        
-        Alert.alert(
-          '🚨 Emergency Call',
-          `${data.message}\nLocation: ${data.location?.address || 'Unknown'}`,
-          [
-            { text: 'Ignore', style: 'cancel' },
-            { text: 'Respond', onPress: () => respondToCall(data) }
-          ]
-        );
-      } else if (data.type === 'police_response') {
-        Alert.alert(
-          '👮‍♂️ Police Response',
-          data.message,
-          [{ text: 'OK' }]
-        );
-      } else if (data.type === 'room_prepared') {
-        Alert.alert(
-          '🏥 Hospital Ready',
-          `Room ${data.roomNumber} prepared by ${data.preparationTeam}`,
-          [{ text: 'Acknowledged' }]
-        );
-      } else if (data.type === 'path_cleared') {
-        // Police has cleared the path for ambulance SOS
+      console.log('Ambulance received:', data); // Log all incoming messages
+      if (data.type === 'path_cleared') {
+        // This is the crucial part: handling the police response
         Alert.alert(
           '✅ Green Corridor Cleared',
-          'Police have cleared the traffic path for your ambulance. You may proceed safely.',
-          [{ text: 'Acknowledged' }]
+          `Police have cleared your path. You may proceed.`,
+          [{ text: 'OK' }]
         );
+        // You can update the UI status here if needed
+      } else if (data.type === 'new_call') {
+        // Handle a new emergency call from the backend dispatch system
+        setEmergencyCalls(prevCalls => [data, ...prevCalls]);
+        Alert.alert('📞 New Emergency Call', data.message);
       }
     };
-    
+
     const checkConnection = setInterval(() => {
       setIsConnected(WebSocketService.isConnected);
     }, 1000);
-    
+
     WebSocketService.addMessageHandler(handleMessage);
-    
+
     return () => {
       WebSocketService.removeMessageHandler(handleMessage);
-      WebSocketService.disconnect();
       clearInterval(checkConnection);
     };
   }, []);
@@ -110,12 +89,12 @@ const AmbulanceDashboard = () => {
 
   const respondToCall = (call) => {
     setCurrentStatus('responding');
-    setEmergencyCalls(prevCalls => 
-      prevCalls.map(c => 
+    setEmergencyCalls(prevCalls =>
+      prevCalls.map(c =>
         c.id === call.id ? { ...c, status: 'responding' } : c
       )
     );
-    
+
     WebSocketService.sendMessage({
       type: 'ambulance_response',
       callId: call.id,
@@ -134,14 +113,14 @@ const AmbulanceDashboard = () => {
 
   const confirmSOSAlert = async () => {
     await getCurrentLocation(); // Get fresh location
-    
+
     if (!currentLocation) {
       Alert.alert('Location Error', 'Unable to get current location. Please try again.');
       return;
     }
 
     const ambulanceId = `AMB-${Date.now()}`;
-    
+
     // Send ambulance detection alert to police (similar to camera detection)
     WebSocketService.sendMessage({
       type: 'emergency_alert',
@@ -158,7 +137,7 @@ const AmbulanceDashboard = () => {
 
     setSosModalVisible(false);
     setCurrentStatus('emergency');
-    
+
     Alert.alert(
       'SOS Alert Sent!',
       `Police have been notified and will clear the green corridor at:\n${currentLocation.address}\n\nWait for path clearance confirmation.`,
@@ -201,7 +180,7 @@ const AmbulanceDashboard = () => {
 
     setPatientModalVisible(false);
     setCurrentStatus('en_route');
-    
+
     // Clear form
     setPatientInfo({
       condition: '',
@@ -220,12 +199,12 @@ const AmbulanceDashboard = () => {
 
   const completeCall = (callId) => {
     setCurrentStatus('available');
-    setEmergencyCalls(prevCalls => 
-      prevCalls.map(c => 
+    setEmergencyCalls(prevCalls =>
+      prevCalls.map(c =>
         c.id === callId ? { ...c, status: 'completed' } : c
       )
     );
-    
+
     WebSocketService.sendMessage({
       type: 'call_completed',
       callId: callId,
@@ -265,7 +244,7 @@ const AmbulanceDashboard = () => {
   return (
     <View style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#F59E0B" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={goBack} style={styles.backButton}>
@@ -276,13 +255,13 @@ const AmbulanceDashboard = () => {
           <Text style={styles.subtitle}>Emergency Medical Services</Text>
         </View>
       </View>
-      
+
       {/* Status & Connection */}
       <View style={styles.statusContainer}>
         <View style={styles.connectionStatus}>
           <View style={styles.statusIndicator}>
             <View style={[
-              styles.statusDot, 
+              styles.statusDot,
               { backgroundColor: isConnected ? '#10B981' : '#EF4444' }
             ]} />
             <Text style={[
@@ -292,14 +271,14 @@ const AmbulanceDashboard = () => {
               {isConnected ? 'Dispatch Connected' : 'Connection Lost'}
             </Text>
           </View>
-          
+
           {!isConnected && (
             <TouchableOpacity style={styles.reconnectButton} onPress={handleReconnect}>
               <Text style={styles.reconnectText}>Reconnect</Text>
             </TouchableOpacity>
           )}
         </View>
-        
+
         <View style={styles.driverStatus}>
           <Text style={styles.statusLabel}>Unit Status:</Text>
           <View style={styles.statusValueContainer}>
@@ -329,7 +308,7 @@ const AmbulanceDashboard = () => {
 
       {/* Emergency Actions */}
       <View style={styles.actionsContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.sosButton}
           onPress={sendSOSAlert}
         >
@@ -337,7 +316,7 @@ const AmbulanceDashboard = () => {
           <Text style={styles.sosSubtext}>Request Green Corridor Clearance</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.patientButton, currentStatus === 'available' && styles.disabledButton]}
           onPress={sendPatientInfo}
           disabled={currentStatus === 'available'}
@@ -346,12 +325,12 @@ const AmbulanceDashboard = () => {
           <Text style={styles.patientSubtext}>Notify Hospital & Police</Text>
         </TouchableOpacity>
       </View>
-      
+
       {/* Emergency Calls Section */}
       <View style={styles.callsSection}>
         <Text style={styles.sectionTitle}>Emergency Dispatch</Text>
-        
-        <ScrollView 
+
+        <ScrollView
           style={styles.callsContainer}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -388,13 +367,13 @@ const AmbulanceDashboard = () => {
                   <Text style={[
                     styles.callStatusText,
                     call.status === 'completed' ? styles.completedStatus :
-                    call.status === 'responding' ? styles.respondingCallStatus : styles.pendingStatus
+                      call.status === 'responding' ? styles.respondingCallStatus : styles.pendingStatus
                   ]}>
                     {call.status || 'Pending'}
                   </Text>
-                  
+
                   {call.status === 'responding' && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.completeButton}
                       onPress={() => completeCall(call.id)}
                     >
@@ -402,7 +381,7 @@ const AmbulanceDashboard = () => {
                     </TouchableOpacity>
                   )}
                   {!call.status && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.respondButton}
                       onPress={() => respondToCall(call)}
                     >
@@ -431,27 +410,27 @@ const AmbulanceDashboard = () => {
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.modalBody}>
               <Text style={styles.warningText}>
                 This will request immediate green corridor clearance from police at your current location.
               </Text>
-              
+
               {currentLocation && (
                 <View style={styles.locationConfirm}>
                   <Text style={styles.locationLabel}>Current Location:</Text>
                   <Text style={styles.locationValue}>{currentLocation.address}</Text>
                 </View>
               )}
-              
+
               <View style={styles.modalActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.cancelButton}
                   onPress={() => setSosModalVisible(false)}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.confirmButton}
                   onPress={confirmSOSAlert}
                 >
@@ -478,13 +457,13 @@ const AmbulanceDashboard = () => {
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalBody}>
               <Text style={styles.inputLabel}>Patient Condition *</Text>
               <TextInput
                 style={styles.textInput}
                 value={patientInfo.condition}
-                onChangeText={(text) => setPatientInfo(prev => ({...prev, condition: text}))}
+                onChangeText={(text) => setPatientInfo(prev => ({ ...prev, condition: text }))}
                 placeholder="e.g., Critical, Stable, Serious"
               />
 
@@ -492,19 +471,19 @@ const AmbulanceDashboard = () => {
               <TextInput
                 style={styles.textInput}
                 value={patientInfo.eta}
-                onChangeText={(text) => setPatientInfo(prev => ({...prev, eta: text}))}
+                onChangeText={(text) => setPatientInfo(prev => ({ ...prev, eta: text }))}
                 placeholder="e.g., 10 minutes, 15-20 minutes"
               />
 
               <Text style={styles.sectionLabel}>Vitals (Optional)</Text>
-              
+
               <Text style={styles.inputLabel}>Heart Rate (bpm)</Text>
               <TextInput
                 style={styles.textInput}
                 value={patientInfo.vitals.heartRate}
                 onChangeText={(text) => setPatientInfo(prev => ({
-                  ...prev, 
-                  vitals: {...prev.vitals, heartRate: text}
+                  ...prev,
+                  vitals: { ...prev.vitals, heartRate: text }
                 }))}
                 placeholder="e.g., 80"
                 keyboardType="numeric"
@@ -515,8 +494,8 @@ const AmbulanceDashboard = () => {
                 style={styles.textInput}
                 value={patientInfo.vitals.bloodPressure}
                 onChangeText={(text) => setPatientInfo(prev => ({
-                  ...prev, 
-                  vitals: {...prev.vitals, bloodPressure: text}
+                  ...prev,
+                  vitals: { ...prev.vitals, bloodPressure: text }
                 }))}
                 placeholder="e.g., 120/80"
               />
@@ -526,8 +505,8 @@ const AmbulanceDashboard = () => {
                 style={styles.textInput}
                 value={patientInfo.vitals.temperature}
                 onChangeText={(text) => setPatientInfo(prev => ({
-                  ...prev, 
-                  vitals: {...prev.vitals, temperature: text}
+                  ...prev,
+                  vitals: { ...prev.vitals, temperature: text }
                 }))}
                 placeholder="e.g., 36.5"
                 keyboardType="numeric"
@@ -537,7 +516,7 @@ const AmbulanceDashboard = () => {
               <TextInput
                 style={styles.textInput}
                 value={patientInfo.allergies}
-                onChangeText={(text) => setPatientInfo(prev => ({...prev, allergies: text}))}
+                onChangeText={(text) => setPatientInfo(prev => ({ ...prev, allergies: text }))}
                 placeholder="Known allergies or 'None'"
               />
 
@@ -545,20 +524,20 @@ const AmbulanceDashboard = () => {
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 value={patientInfo.medicalHistory}
-                onChangeText={(text) => setPatientInfo(prev => ({...prev, medicalHistory: text}))}
+                onChangeText={(text) => setPatientInfo(prev => ({ ...prev, medicalHistory: text }))}
                 placeholder="Relevant medical history"
                 multiline
                 numberOfLines={3}
               />
-              
+
               <View style={styles.modalActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.cancelButton}
                   onPress={() => setPatientModalVisible(false)}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.submitButton}
                   onPress={submitPatientInfo}
                 >
@@ -572,6 +551,7 @@ const AmbulanceDashboard = () => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   safeArea: {

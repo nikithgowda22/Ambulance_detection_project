@@ -1,4 +1,3 @@
-// app/police-dashboard.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -62,7 +61,6 @@ const PoliceDashboard = () => {
     }
   };
 
-  // app/police-dashboard.js
   const deleteAmbulanceRecord = async (ambulanceId) => {
     Alert.alert(
       'Confirm Deletion',
@@ -74,8 +72,7 @@ const PoliceDashboard = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // ✅ Fix: Use WebSocketService directly.
-              const host = "192.168.1.8";   // your backend server host
+              const host = "192.168.1.8";
               const response = await fetch(`http://${host}:8000/ambulance-history/${ambulanceId}`, {
                 method: 'DELETE',
               });
@@ -97,92 +94,51 @@ const PoliceDashboard = () => {
     );
   };
 
-
   useEffect(() => {
     // Initial data fetch
     fetchAmbulanceHistory();
     fetchActiveAmbulances();
 
+    // Connect to the WebSocket service
     WebSocketService.connect('police');
 
+    // Define the message handler
     const handleMessage = (data) => {
-      console.log('Police received:', data);
-
+      console.log('Police received:', data); // Log to see all incoming messages
+      
       if (data.type === 'emergency_alert') {
-        // accept SOS OR camera detections
-        if (data.source === 'ambulance_sos' || data.message.includes('AMBULANCE DETECTED')) {
-          const ambulanceData = {
-            id: data.ambulanceId || data.id,
-            detectedAt: data.detectedAt || data.timestamp,
-            location: data.location,
-            status: data.status || 'active',
-            priority: data.priority || 'HIGH',
-            source: data.source || 'camera',  // 👈 distinguish SOS vs camera
-            message: data.message
-          };
-          setActiveAmbulances(prev => [...prev, ambulanceData]);
-
-
+        // This handles the SOS request from the ambulance dashboard
+        if (data.source === 'ambulance_sos') {
           setActiveAmbulances(prevActive => {
-            const exists = prevActive.some(amb => amb.id === ambulanceData.id);
-            if (!exists) {
-              return [ambulanceData, ...prevActive];
+            // Check for duplicate to avoid adding the same alert multiple times
+            if (!prevActive.some(amb => amb.id === data.id)) {
+              return [
+                {
+                  id: data.id,
+                  detectedAt: data.timestamp,
+                  location: data.location,
+                  status: 'detected',
+                  priority: data.priority,
+                  source: data.source,
+                  message: `🚨 AMBULANCE DETECTED - Requesting green corridor clearance`
+                },
+                ...prevActive
+              ];
             }
             return prevActive;
           });
-
-          // Show different alert based on source
-          const alertTitle = data.source === 'ambulance_sos'
-            ? '🚨 AMBULANCE SOS REQUEST'
-            : '🚨 AMBULANCE DETECTED IN VIDEO';
-
-          const alertMessage = data.source === 'ambulance_sos'
-            ? `Ambulance requesting immediate green corridor clearance\n\nLocation: ${data.location?.address || 'Unknown'}`
-            : `Location: ${data.location?.address || 'Unknown'}\n\nAmbulance requesting green corridor clearance`;
-
-          Alert.alert(
-            alertTitle,
-            alertMessage,
-            [
-              { text: 'Dismiss', style: 'cancel' },
-              { text: 'Clear Path', onPress: () => clearAmbulancePath(ambulanceData) },
-              { text: 'View Location', onPress: () => openLocationMap(data.location) }
-            ]
-          );
+          Alert.alert('🚨 New SOS Alert', data.message);
         } else {
-          // Regular emergency alerts (not ambulance related)
-          setEmergencyAlerts(prevAlerts => [data, ...prevAlerts.slice(0, 9)]);
-
-          Alert.alert(
-            '🚨 EMERGENCY SOS ALERT',
-            `Location: ${data.location?.address || 'Unknown'}\n\n${data.message}`,
-            [
-              { text: 'Dismiss', style: 'cancel' },
-              { text: 'Respond', onPress: () => respondToEmergency(data) },
-              { text: 'View Map', onPress: () => openLocationMap(data.location) }
-            ]
-          );
+          // This handles camera-based ambulance detections
+          setEmergencyAlerts(prevAlerts => [data, ...prevAlerts]);
         }
-      } else if (data.type === 'ambulance_notification') {
-        // Hospital transport notifications
-        setAmbulanceAlerts(prevAlerts => [data, ...prevAlerts.slice(0, 9)]);
-
+      } else if (data.type === 'patient_incoming') {
         Alert.alert(
-          '🚑 Ambulance Alert',
-          `${data.message}\nETA: ${data.eta || 'Unknown'}`,
-          [{ text: 'Acknowledged', style: 'default' }]
+          '🏥 Patient Incoming',
+          `Ambulance is en route with a patient in ${data.patientCondition} condition. ETA: ${data.eta}`
         );
-      } else if (data.type === 'ambulance_status_update') {
-        // Update ambulance status
-        if (data.status === 'passed') {
-          // Move from active to history
-          setActiveAmbulances(prevActive =>
-            prevActive.filter(amb => amb.id !== data.ambulanceId)
-          );
-
-          // Refresh history from database
-          fetchAmbulanceHistory();
-        }
+      } else if (data.type === 'call_completed') {
+        Alert.alert('✅ Call Completed', data.message);
       }
     };
 
@@ -194,13 +150,11 @@ const PoliceDashboard = () => {
 
     return () => {
       WebSocketService.removeMessageHandler(handleMessage);
-      WebSocketService.disconnect();
       clearInterval(checkConnection);
     };
   }, []);
 
   const clearAmbulancePath = (ambulanceData) => {
-    // Update ambulance status to "path_cleared"
     setActiveAmbulances(prevActive =>
       prevActive.map(amb =>
         amb.id === ambulanceData.id
@@ -209,7 +163,6 @@ const PoliceDashboard = () => {
       )
     );
 
-    // Send acknowledgment to backend
     WebSocketService.sendMessage({
       type: 'path_cleared',
       ambulanceId: ambulanceData.id,
@@ -217,7 +170,6 @@ const PoliceDashboard = () => {
       timestamp: new Date().toISOString()
     });
 
-    // If it's from ambulance SOS, also send direct confirmation to ambulance
     if (ambulanceData.source === 'ambulance_sos') {
       WebSocketService.sendMessage({
         type: 'path_cleared',
@@ -256,7 +208,6 @@ const PoliceDashboard = () => {
               passedAt: new Date().toISOString()
             };
 
-            // Send update to backend
             WebSocketService.sendMessage({
               type: 'ambulance_passed',
               ambulanceId: ambulanceData.id,
@@ -266,15 +217,10 @@ const PoliceDashboard = () => {
               timestamp: new Date().toISOString()
             });
 
-            // Remove from active list
             setActiveAmbulances(prev =>
               prev.filter(amb => amb.id !== ambulanceData.id)
             );
 
-            // Add to local history immediately
-            setHistory(prev => [passedRecord, ...prev]);
-
-            // Also refresh from backend (to stay in sync)
             fetchAmbulanceHistory();
 
             Alert.alert('✅ Updated', 'Ambulance marked as passed and added to history');
@@ -283,7 +229,6 @@ const PoliceDashboard = () => {
       ]
     );
   };
-
 
   const respondToEmergency = (alert) => {
     WebSocketService.sendMessage({
@@ -312,7 +257,6 @@ const PoliceDashboard = () => {
 
   const handleReconnect = () => {
     WebSocketService.connect('police');
-    // Refresh data when reconnecting
     fetchAmbulanceHistory();
     fetchActiveAmbulances();
   };
