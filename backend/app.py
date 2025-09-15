@@ -305,7 +305,7 @@
 #     }
 
 # backend/app.py
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import asyncio
@@ -533,6 +533,19 @@ class DatabaseService:
             ''', (ambulance_id, message, recipient_type))
             conn.commit()
             logger.info(f"Queued notification for {recipient_type}: {message[:50]}...")
+    @staticmethod
+    def delete_ambulance_record(ambulance_id: str) -> bool:
+        """
+        Deletes a specific ambulance record from the database.
+        Returns True if a record was deleted, False otherwise.
+        """
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM ambulance_detections WHERE id = ?", (ambulance_id,))
+            conn.commit()
+            
+            # Check if any row was deleted
+            return cursor.rowcount > 0
 
 # Store active ambulances and their status (in-memory cache)
 active_ambulances = {}
@@ -746,6 +759,22 @@ async def get_ambulance_history():
 async def get_active_ambulances():
     active = DatabaseService.get_active_ambulances()
     return {"active": active}
+@app.delete("/ambulance-history/{ambulance_id}")
+async def delete_ambulance_history(ambulance_id: str):
+    """
+    Deletes a specific ambulance record from the history.
+    """
+    try:
+        success = DatabaseService.delete_ambulance_record(ambulance_id)
+        if success:
+            logger.info(f"Ambulance record {ambulance_id} deleted successfully.")
+            return {"status": "success", "message": f"Record for ambulance ID {ambulance_id} deleted successfully."}
+        else:
+            logger.warning(f"Attempted to delete non-existent record: {ambulance_id}")
+            raise HTTPException(status_code=404, detail=f"Record for ambulance ID {ambulance_id} not found.")
+    except Exception as e:
+        logger.error(f"Error deleting ambulance record {ambulance_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
 # Load video model
 video_model = None
