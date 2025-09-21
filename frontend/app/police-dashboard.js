@@ -27,7 +27,7 @@ const PoliceDashboard = () => {
   // Fetch ambulance history from database
   const fetchAmbulanceHistory = async () => {
     try {
-      const response = await fetch('http://192.168.1.8:8000/ambulance-history');
+      const response = await fetch('http://192.168.1.9:8000/ambulance-history');
       const data = await response.json();
       setAmbulanceHistory(data.history);
       console.log('Fetched ambulance history:', data.history.length, 'records');
@@ -39,7 +39,7 @@ const PoliceDashboard = () => {
   // Fetch active ambulances from database
   const fetchActiveAmbulances = async () => {
     try {
-      const response = await fetch('http://192.168.1.8:8000/active-ambulances');
+      const response = await fetch('http://192.168.1.9:8000/active-ambulances');
       const data = await response.json();
 
       // Convert database format to component format
@@ -72,7 +72,7 @@ const PoliceDashboard = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const host = "192.168.1.8";
+              const host = "192.168.1.9";
               const response = await fetch(`http://${host}:8000/ambulance-history/${ambulanceId}`, {
                 method: 'DELETE',
               });

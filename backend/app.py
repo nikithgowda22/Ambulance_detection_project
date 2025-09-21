@@ -49,6 +49,7 @@ def init_database():
             priority TEXT DEFAULT 'HIGH',
             cleared_at TIMESTAMP,
             passed_at TIMESTAMP,
+            source TEXT DEFAULT 'camera',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -116,8 +117,8 @@ class DatabaseService:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO ambulance_detections 
-                (id, detected_at, location_lat, location_lng, location_address, status, priority)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (id, detected_at, location_lat, location_lng, location_address, status, priority, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 ambulance_data['id'],
                 ambulance_data['detectedAt'],
@@ -125,10 +126,11 @@ class DatabaseService:
                 ambulance_data['location']['longitude'],
                 ambulance_data['location']['address'],
                 ambulance_data['status'],
-                ambulance_data['priority']
+                ambulance_data['priority'],
+                ambulance_data.get('source', 'camera')
             ))
             conn.commit()
-            logger.info(f"Saved ambulance detection {ambulance_data['id']} to database")
+            logger.info(f"Saved ambulance detection {ambulance_data['id']} from source {ambulance_data.get('source', 'camera')} to database")
     
     @staticmethod
     def update_ambulance_status(ambulance_id: str, status: str, timestamp_field: str = None):
@@ -180,7 +182,8 @@ class DatabaseService:
                     'status': row['status'],
                     'priority': row['priority'],
                     'clearedAt': row['cleared_at'],
-                    'passedAt': row['passed_at']
+                    'passedAt': row['passed_at'],
+                    'source': row['source']
                 })
             
             return history
@@ -210,7 +213,8 @@ class DatabaseService:
                     },
                     'status': row['status'],
                     'priority': row['priority'],
-                    'clearedAt': row['cleared_at']
+                    'clearedAt': row['cleared_at'],
+                    'source': row['source']
                 })
             
             return active
@@ -282,7 +286,8 @@ class ConnectionManager:
                     "timestamp": ambulance['detectedAt'],
                     "ambulanceId": ambulance['id'],
                     "priority": ambulance['priority'],
-                    "status": ambulance['status']
+                    "status": ambulance['status'],
+                    "source": ambulance['source']
                 }))
 
     def disconnect(self, websocket: WebSocket, user_type: str):
@@ -401,7 +406,7 @@ async def handle_websocket_message(message_data: dict, sender_type: str):
     """Handle incoming WebSocket messages from different clients."""
     message_type = message_data.get("type")
     
-    # NEW: Handle emergency SOS from the ambulance app
+    # Handle emergency SOS from the ambulance app
     if message_type == "emergency_alert" and message_data.get("source") == "ambulance_sos":
         ambulance_id = message_data.get("ambulanceId")
         location = message_data.get("location")
@@ -412,14 +417,16 @@ async def handle_websocket_message(message_data: dict, sender_type: str):
             "detectedAt": message_data["timestamp"],
             "location": location,
             "status": "detected",
-            "priority": "HIGH"
+            "priority": "HIGH",
+            "source": message_data.get("source")
         })
         
         # Add to in-memory cache
         active_ambulances[ambulance_id] = {
             "id": ambulance_id,
             "location": location,
-            "status": "detected"
+            "status": "detected",
+            "source": message_data.get("source")
         }
         
         # Broadcast the alert to police and traffic dashboards
@@ -568,13 +575,13 @@ def detect_ambulance(video_source=0, alert_callback=None):
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                             cv2.putText(frame, "Ambulance Detected", (x1, y1 - 10),
-                                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
             else:
                 # Mock detection for testing (simulate detection every 30 seconds)
                 if int(current_time) % 30 == 0 and (current_time - last_detection_time) > detection_cooldown:
                     ambulance_detected = True
                     cv2.putText(frame, "MOCK: Ambulance Detected", (50, 50),
-                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         except Exception as e:
             logger.error(f"Detection error: {e}")
 
@@ -614,7 +621,8 @@ def run_detection_in_background():
             "detectedAt": datetime.now().isoformat(),
             "location": location,
             "status": "detected",
-            "priority": "HIGH"
+            "priority": "HIGH",
+            "source": "camera"
         }
         
         # Save to database
@@ -632,7 +640,8 @@ def run_detection_in_background():
             "timestamp": datetime.now().isoformat(),
             "ambulanceId": ambulance_id,
             "priority": "HIGH",
-            "status": "detected"
+            "status": "detected",
+            "source": "camera"
         }
         
         alert_json = json.dumps(alert_message)
@@ -710,7 +719,8 @@ async def test_detection():
         "detectedAt": datetime.now().isoformat(),
         "location": location,
         "status": "detected",
-        "priority": "HIGH"
+        "priority": "HIGH",
+        "source": "camera"
     }
     
     # Save to database
@@ -727,7 +737,8 @@ async def test_detection():
         "timestamp": datetime.now().isoformat(),
         "ambulanceId": ambulance_id,
         "priority": "HIGH",
-        "status": "detected"
+        "status": "detected",
+        "source": "camera"
     }
     
     alert_json = json.dumps(alert_message)

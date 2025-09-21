@@ -6,3 +6,10 @@ ultralytics==8.0.207
 numpy==1.24.3
 pydantic==2.5.0
 python-multipart==0.0.6
+torch==2.5.1 
+torchvision==0.20.1
+import torch
+import ultralytics
+
+# Explicitly allow YOLO model globals for future compatibility
+torch.serialization.add_safe_globals([ultralytics.nn.tasks.DetectionModel])

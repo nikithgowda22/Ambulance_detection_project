@@ -148,7 +148,7 @@ class WebSocketService {
     
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       // For physical devices (iPhone, Android phone)
-      host = '192.168.1.8';  // your computer's IP
+      host = '192.168.1.9';  // your computer's IP
     } else {
       // For simulators/emulators
       host = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
